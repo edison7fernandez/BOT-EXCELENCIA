@@ -1,43 +1,65 @@
+from fastapi import FastAPI, Request, Response
 import os
-from fastapi import FastAPI, Request
-from fastapi.responses import PlainTextResponse, HTMLResponse
-from dotenv import load_dotenv
-import google.generativeai as genai
 
-load_dotenv()
 app = FastAPI()
-genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
-model = genai.GenerativeModel('gemini-1.5-flash')
-VERIFY_TOKEN = "eddie_excelencia_2026"
 
-@app.get("/", response_class=HTMLResponse)
-async def home():
-    return """
-    <html><head><title>BOT-EXCELENCIA | PAUTO</title>
-    <style>body{font-family:Arial;background:#0f172a;color:white;text-align:center;padding:50px}
-   .card{background:white;color:#0f172a;max-width:600px;margin:auto;padding:40px;border-radius:20px}
-    h1{color:#2563eb}.status{background:#10b981;color:white;padding:10px 20px;border-radius:30px;display:inline-block}</style>
-    </head><body><div class="card"><h1>🚀 BOT-EXCELENCIA</h1>
-    <div class="status">● ONLINE 24/7 - PAUTO PAYTON EDITION</div>
-    <p><b>Asesor Automotriz Inteligente - Apariencia Profesional</b></p>
-    <p>Potenciado por Payton & IA</p></div></body></html>
-    """
+# CONFIG - Pon estos en tu Render > Environment
+VERIFY_TOKEN = os.getenv("VERIFY_TOKEN", "abra_excelencia_123")
+WHATSAPP_TOKEN = os.getenv("WHATSAPP_TOKEN") # El token de Meta
+PHONE_ID = os.getenv("PHONE_ID") # El ID de tu número +593-96-321-2112
 
+@app.get("/")
+def home():
+    return {"status": "ABRA Bebé vivo", "mensaje": "Creo conforme hablo"}
+
+# PASO 1 - VERIFICACIÓN DE META (Para que Meta te apruebe el webhook)
 @app.get("/webhook")
-async def verificar(request: Request):
-    if request.query_params.get("hub.verify_token") == VERIFY_TOKEN:
-        return PlainTextResponse(request.query_params.get("hub.challenge"))
-    return PlainTextResponse("Error", status_code=403)
+async def verify_webhook(request: Request):
+    mode = request.query_params.get("hub.mode")
+    token = request.query_params.get("hub.verify_token")
+    challenge = request.query_params.get("hub.challenge")
 
+    if mode == "subscribe" and token == VERIFY_TOKEN:
+        print("WEBHOOK VERIFICADO!")
+        return Response(content=challenge, media_type="text/plain")
+    else:
+        return Response(status_code=403)
+
+# PASO 2 - RECIBIR MENSAJES REALES
 @app.post("/webhook")
-async def recibir(request: Request):
+async def receive_message(request: Request):
     data = await request.json()
+    print("Mensaje recibido:", data)
+
+    # Aquí es donde el bebé respira
     try:
-        value = data['entry'][0]['changes'][0]['value']
-        if 'messages' not in value: return {"ok": True}
-        texto = value['messages'][0]['text']['body']
-        prompt = f"Eres Payton, asesor TOP de PAUTO Ecuador, profesional, elegante, vendedor experto. Cliente dijo: {texto}. Responde corto, profesional max 2 lineas, usa emojis premium y cierra para agendar cita."
-        respuesta = model.generate_content(prompt).text
-        print(respuesta)
-        return {"ok": True}
-    except: return {"ok": True}
+        # Extraer mensaje
+        entry = data['entry'][0]['changes'][0]['value']
+        if 'messages' in entry:
+            mensaje = entry['messages'][0]['text']['body']
+            numero = entry['messages'][0]['from']
+            print(f"De {numero}: {mensaje}")
+
+            # Aquí luego conectamos el ALMA (Paso 2)
+            # Por ahora responde eco con excelencia
+            await responder_whatsapp(numero, f"¡Recibido con excelencia! Dijiste: {mensaje} - ABRA Bebé está naciendo 👶")
+
+    except Exception as e:
+        print(f"Error: {e}")
+
+    return {"status": "ok"}
+
+async def responder_whatsapp(to, text):
+    import httpx
+    url = f"https://graph.facebook.com/v20.0/{PHONE_ID}/messages"
+    headers = {
+        "Authorization": f"Bearer {WHATSAPP_TOKEN}",
+        "Content-Type": "application/json"
+    }
+    payload = {
+        "messaging_product": "whatsapp",
+        "to": to,
+        "text": {"body": text}
+    }
+    async with httpx.AsyncClient() as client:
+        await client.post(url, json=payload, headers=headers)
